@@ -1,9 +1,12 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import pg from 'pg';
+import pkg from 'pg';
 import * as schema from './schema';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-pg.types.setTypeParser(pg.types.builtins.INT8, (v) => Number(v));
+const { Pool, types } = pkg as typeof import('pg');
+types.setTypeParser(types.builtins.INT8, (v) => Number(v));
 
 export type Database = ReturnType<typeof drizzle>;
 
@@ -11,15 +14,19 @@ interface OpenDbOptions {
   schema?: string;
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const migrationsFolder = join(__dirname, '..', '..', 'server', 'drizzle');
+
 export async function openDb(connectionString: string, { schema: schemaName }: OpenDbOptions = {}): Promise<Database> {
-  let pool: pg.Pool;
+  let pool: InstanceType<typeof Pool>;
 
   if (schemaName) {
-    const admin = new pg.Pool({ connectionString, max: 1 });
+    const admin = new Pool({ connectionString, max: 1 });
     await admin.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
     await admin.end();
 
-    pool = new pg.Pool({
+    pool = new Pool({
       connectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
@@ -27,7 +34,7 @@ export async function openDb(connectionString: string, { schema: schemaName }: O
       options: `-c search_path=${schemaName}`,
     });
   } else {
-    pool = new pg.Pool({
+    pool = new Pool({
       connectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
@@ -40,14 +47,13 @@ export async function openDb(connectionString: string, { schema: schemaName }: O
   const db = drizzle(pool, { schema });
 
   // Run migrations
-  await migrate(db, {
-    migrationsFolder: './drizzle',
-  }).catch(() => {
-    // Migrations folder doesn't exist yet, skip
-  });
-
-  // Fallback: create tables manually if they don't exist
-  await createTablesIfNotExists(db);
+  try {
+    await migrate(db, { migrationsFolder });
+  } catch (err) {
+    console.warn('Migration warning:', (err as Error).message);
+    // Fallback to creating tables manually if migration fails
+    await createTablesIfNotExists(db);
+  }
 
   return db;
 }

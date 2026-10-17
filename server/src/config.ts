@@ -3,7 +3,7 @@ import { z } from 'zod';
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(0).default(3000),
-  DATABASE_URL: z.string().default('postgres://taskflow:taskflow@localhost:5433/taskflow'),
+  DATABASE_URL: z.string().default('postgres://taskflow:taskflow@localhost:5432/taskflow'),
   DB_SCHEMA: z.string().optional(),
   JWT_SECRET: z.string().min(16).default('dev-only-secret-change-me-please'),
   ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),

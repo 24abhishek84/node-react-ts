@@ -1,7 +1,7 @@
-import { pgTable, bigserial, text, timestamp, smallint, date, integer, boolean, jsonb, index, unique } from 'drizzle-orm/pg-core';
+import { pgTable, bigserial, bigint, text, timestamp, smallint, date, integer, boolean, jsonb, index } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
-  id: bigserial('id').primaryKey().notNull(),
+  id: bigserial('id', { mode: 'number' }).primaryKey().notNull(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -10,8 +10,8 @@ export const users = pgTable('users', {
 export const tasks = pgTable(
   'tasks',
   {
-    id: bigserial('id').primaryKey().notNull(),
-    userId: bigserial('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    id: bigserial('id', { mode: 'number' }).primaryKey().notNull(),
+    userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     status: text('status').notNull().default('todo'),
@@ -27,16 +27,16 @@ export const tasks = pgTable(
 );
 
 export const refreshTokens = pgTable('refresh_tokens', {
-  id: bigserial('id').primaryKey().notNull(),
-  userId: bigserial('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  id: bigserial('id', { mode: 'number' }).primaryKey().notNull(),
+  userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   tokenHash: text('token_hash').notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revoked: boolean('revoked').notNull().default(false),
 });
 
 export const auditLog = pgTable('audit_log', {
-  id: bigserial('id').primaryKey().notNull(),
-  userId: bigserial('user_id'),
+  id: bigserial('id', { mode: 'number' }).primaryKey().notNull(),
+  userId: bigint('user_id', { mode: 'number' }),
   event: text('event').notNull(),
   payload: jsonb('payload'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

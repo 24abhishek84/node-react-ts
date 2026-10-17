@@ -10,6 +10,7 @@ import { taskRoutes } from './modules/tasks/tasks.routes';
 import type { Config } from './config';
 import type { Logger } from './logger';
 import type { Database } from './db';
+import { sql } from 'drizzle-orm';
 
 interface AppCreateOptions {
   logger?: Logger;
@@ -35,12 +36,16 @@ export async function createApp(config: Config, { logger = createLogger() }: App
   app.use(requestId(logger), cors(config.CORS_ORIGIN), express.json({ limit: '100kb' }));
 
   app.get('/health', async (_req, res) => {
-    await db.query('SELECT 1');
-    res.json({ status: 'ok', uptime: process.uptime() });
+    try {
+      await db.execute(sql`SELECT 1`);
+      res.json({ status: 'ok', uptime: process.uptime() });
+    } catch (err) {
+      res.status(503).json({ status: 'error', error: 'Database unavailable' });
+    }
   });
   app.use('/api/auth', authRoutes({ authService, config }));
   app.use('/api/tasks', requireAuth(config.JWT_SECRET), taskRoutes({ taskService }));
 
   app.use(notFoundHandler, errorHandler(logger));
-  return { app, db, close: () => db.end() };
+  return { app, db, close: async () => {} };
 }
