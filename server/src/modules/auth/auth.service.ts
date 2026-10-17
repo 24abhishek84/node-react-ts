@@ -46,7 +46,7 @@ export function createAuthService({ db, config, bus }: AuthServiceOptions): Auth
     const refreshToken = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + config.REFRESH_TTL_DAYS * 86_400_000);
     await db.insert(refreshTokens).values({
-      userId: BigInt(userId),
+      userId,
       tokenHash: sha256(refreshToken),
       expiresAt,
     });
@@ -95,7 +95,9 @@ export function createAuthService({ db, config, bus }: AuthServiceOptions): Auth
         .returning({ userId: refreshTokens.userId });
 
       if (result.length > 0) {
-        return issueTokens(Number(result[0]!.userId));
+        const userId = Number(result[0]!.userId);
+        const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        return { user: { id: userId, email: user[0]!.email }, ...(await issueTokens(userId)) };
       }
 
       const token = await db

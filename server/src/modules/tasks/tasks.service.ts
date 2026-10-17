@@ -1,4 +1,4 @@
-import { and, eq, lt, ilike, desc, asc } from 'drizzle-orm';
+import { and, eq, lt, ilike, desc, count, sql } from 'drizzle-orm';
 import { conflict, notFound } from '../../errors';
 import type { Database } from '../../db';
 import type { EventBus } from '../../events';
@@ -64,7 +64,7 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
     const result = await db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.id, BigInt(id)), eq(tasks.userId, BigInt(userId))))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .limit(1);
     if (!result[0]) throw notFound('Task');
     return mapTaskRow(result[0]);
@@ -77,7 +77,7 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
       const result = await db
         .insert(tasks)
         .values({
-          userId: BigInt(userId),
+          userId,
           title: input.title!,
           description: input.description ?? '',
           priority: input.priority ?? 2,
@@ -89,10 +89,10 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
     },
 
     async list(userId: number, { status, search, limit, cursor }: ListOptions): Promise<ListResult> {
-      const conditions = [eq(tasks.userId, BigInt(userId))];
+      const conditions = [eq(tasks.userId, userId)];
       if (status) conditions.push(eq(tasks.status, status));
       if (search) conditions.push(ilike(tasks.title, `%${search.replace(/[\\%_]/g, '\\$&')}%`));
-      if (cursor) conditions.push(lt(tasks.id, BigInt(cursor)));
+      if (cursor) conditions.push(lt(tasks.id, cursor));
 
       const rows = await db
         .select()
@@ -123,13 +123,13 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
         .update(tasks)
         .set({
           ...updates,
-          version: tasks.version + 1,
+          version: sql`${tasks.version} + 1`,
           updatedAt: new Date(),
         })
         .where(
           and(
-            eq(tasks.id, BigInt(id)),
-            eq(tasks.userId, BigInt(userId)),
+            eq(tasks.id, id),
+            eq(tasks.userId, userId),
             eq(tasks.version, expectedVersion)
           )
         )
@@ -150,7 +150,7 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
     async remove(userId: number, id: number): Promise<void> {
       const result = await db
         .delete(tasks)
-        .where(and(eq(tasks.id, BigInt(id)), eq(tasks.userId, BigInt(userId))))
+        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
         .returning();
       if (result.length === 0) throw notFound('Task');
       bus.emit('task.deleted', { userId, taskId: id });
@@ -160,14 +160,15 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
       const rows = await db
         .select({
           status: tasks.status,
-          count: tasks.id,
+          count: count(),
         })
         .from(tasks)
-        .where(eq(tasks.userId, BigInt(userId)));
+        .where(eq(tasks.userId, userId))
+        .groupBy(tasks.status);
 
       const stats: TaskStats = { todo: 0, in_progress: 0, done: 0 };
       for (const row of rows) {
-        stats[row.status as keyof TaskStats] = (stats[row.status as keyof TaskStats] || 0) + 1;
+        stats[row.status as keyof TaskStats] = row.count;
       }
       return stats;
     },
@@ -179,10 +180,10 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
           .update(tasks)
           .set({
             status,
-            version: tasks.version + 1,
+            version: sql`${tasks.version} + 1`,
             updatedAt: new Date(),
           })
-          .where(and(eq(tasks.id, BigInt(id)), eq(tasks.userId, BigInt(userId))))
+          .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
           .returning();
         if (result.length === 0) throw notFound('One or more tasks');
         changed += result.length;
@@ -196,7 +197,7 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
         const rows = await db
           .select()
           .from(tasks)
-          .where(and(eq(tasks.userId, BigInt(userId)), lt(tasks.id, BigInt(cursor))))
+          .where(and(eq(tasks.userId, userId), lt(tasks.id, cursor)))
           .orderBy(desc(tasks.id))
           .limit(500);
         if (rows.length === 0) return;
@@ -208,8 +209,8 @@ export function createTaskService({ db, bus }: TaskServiceOptions): TaskService 
 }
 
 function mapTaskRow(row: {
-  id: bigint;
-  userId: bigint;
+  id: number;
+  userId: number;
   title: string;
   description: string;
   status: string;
@@ -220,8 +221,8 @@ function mapTaskRow(row: {
   updatedAt: Date;
 }): Task {
   return {
-    id: Number(row.id),
-    userId: Number(row.userId),
+    id: row.id,
+    userId: row.userId,
     title: row.title,
     description: row.description,
     status: row.status as Task['status'],

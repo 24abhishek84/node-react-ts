@@ -9,12 +9,13 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
+    "prestart": "npm run db:setup -w . || true",
     "build": "tsc",
     "test": "node --test --test-reporter=spec dist/**/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "drizzle-orm": "^0.30.10",
+    "drizzle-orm": "^0.45.4",
     "express": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
